@@ -14,6 +14,8 @@ use std::collections::HashSet;
 use std::cmp::Ordering;
 use std::iter::once;
 use std::ops::Range;
+use std::ops::RangeBounds;
+use std::ops::RangeInclusive;
 use web_sys::WebGlBuffer;
 
 
@@ -82,16 +84,10 @@ impl Cursor {
 // ===============
 
 /// The number of vertices of single cursor.
-const CURSOR_BASE_LAYOUT_SIZE : usize = 2;
+const VERTICES_PER_CURSOR : usize = 2;
+const LINE_TOP            : f64   = 0.8;
+const LINE_BOTTOM         : f64   = -0.2;
 
-lazy_static! {
-    /// The base vertices position of single cursor. This position is then translated to the
-    /// actual cursor position.
-    pub static ref CURSOR_VERTICES_BASE_LAYOUT : [Point2<f32>;CURSOR_BASE_LAYOUT_SIZE] =
-        [ Point2::new(0.0, -0.2)
-        , Point2::new(0.0,  0.8)
-        ];
-}
 
 /// Structure handling many cursors.
 ///
@@ -100,9 +96,11 @@ lazy_static! {
 /// a WebGL buffer with vertex positions of all cursors.
 #[derive(Debug)]
 pub struct Cursors {
-    pub cursors       : Vec<Cursor>,
-    pub dirty_cursors : HashSet<usize>,
-    pub buffer        : WebGlBuffer,
+    pub cursors          : Vec<Cursor>,
+    pub cursors_dirty    : bool,
+    pub selection_dirty  : bool,
+    pub cursors_buffer   : WebGlBuffer,
+    pub selection_buffer : WebGlBuffer,
 }
 
 impl Cursors {
@@ -110,9 +108,11 @@ impl Cursors {
     /// Create empty `Cursors` structure.
     pub fn new(gl_context:&Context) -> Self {
         Cursors {
-            cursors       : Vec::new(),
-            dirty_cursors : HashSet::new(),
-            buffer        : gl_context.create_buffer().unwrap()
+            cursors          : Vec::new(),
+            cursors_dirty    : bool,
+            selection_dirty  : bool,
+            cursors_buffer   : gl_context.create_buffer().unwrap(),
+            selection_buffer : gl_context.create_buffer().unwrap(),
         }
     }
 
@@ -147,16 +147,44 @@ impl Cursors {
     }
 
     fn cursor_vertices(cursor:&Cursor, content:&mut TextComponentContent, fonts:&mut Fonts)
-    -> SmallVec<[f32;12]> {
-        let position    = cursor.render_position(content,fonts);
-        let to_position = Translation2::new(position.x as f32,position.y as f32);
-        let base        = CURSOR_VERTICES_BASE_LAYOUT.iter();
-        let on_position = base.map(|p| to_position * p);
-        on_position.map(point_to_iterable).flatten().collect()
+    -> SmallVec<[f32;4]> {
+        let position = cursor.render_position(content,fonts);
+        let x        = position.x as f32;
+        let y_min    = (position.y + LINE_BOTTOM) as f32;
+        let y_max    = (position.y + LINE_TOP)    as f32;
+        SmallVec::from_buf([x, y_min, x, y_max])
+    }
+
+    fn selection_vertices(cursor:&Cursor, content:&mut TextComponentContent, fonts:&mut Fonts)
+    -> SmallVec<[f32;36]> {
+        let selection         = cursor.selection_range();
+        let font              = fonts.get_render_info(content.font);
+        let left              = line.line.get_char_x_position(selection.start.column,font);
+        let right             = line.line.get_char_x_range(selection.end.column,font).end;
+        let min               = -1e30;
+        let max               = 1e30;
+        let first_line_top    = content.line(selection.start.line).start_point().y + LINE_TOP;
+        let first_line_bottom = content.line(selection.start.line).start_point().y + LINE_BOTTOM;
+        let last_line_top     = content.line(selection.end.line  ).start_point().y + LINE_TOP;
+        let last_line_bottom  = content.line(selection.end.line  ).start_point().y + LINE_BOTTOM;
+        if selection.start.line == selection.end.line {
+            Self::vertices_of_square(left,right,first_line_top,first_line_bottom).into()
+        } else {
+            let first_sq  = Self::vertices_of_square(left,max ,first_line_top   ,first_line_bottom);
+            let middle_sq = Self::vertices_of_square(min ,max ,first_line_bottom,last_line_top    );
+            let last_sq   = Self::vertices_of_square(min ,right,last_line_top   ,last_line_bottom );
+            [first_sq,middle_sq,last_sq].iter().flatten().collect()
+        }
+    }
+
+    fn vertices_of_square<F>(left:F, right:F, top:F, bottom:F)
+    -> SmallVec<[f32;12]>
+    where F : Into<f32> {
+        SmallVec::from_buf([left,bottom,left,top,right,bottom,left,top,right,bottom,right,top])
     }
 
     /// Number of vertices in cursors' buffer.
     pub fn vertices_count(&self) -> usize {
-        self.cursors.len() * CURSOR_BASE_LAYOUT_SIZE
+        self.cursors.len() * VERTICES_PER_CURSOR
     }
 }

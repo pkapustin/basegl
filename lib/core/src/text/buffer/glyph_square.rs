@@ -254,6 +254,15 @@ impl<'a> GlyphAttributeBuilder for GlyphTextureCoordsBuilder<'a> {
     }
 }
 
+
+// =========================
+// === GlyphColorBuilder ===
+// =========================
+
+struct GlyphColorBuilder {
+
+}
+
 /* Note [Output size]
  *
  * We can use `Self::OUTPUT_SIZE` instead of current hardcode 12 once the rustc bug will be fixed:

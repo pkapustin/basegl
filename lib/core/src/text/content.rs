@@ -175,7 +175,7 @@ impl TextComponentContent {
         }
     }
 
-    pub fn line(& mut self, index:usize) -> LineRef {
+    pub fn line(&mut self, index:usize) -> LineRef {
         LineRef {
             line    : &mut self.lines[index],
             line_id : index,
