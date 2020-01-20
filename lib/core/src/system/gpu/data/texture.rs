@@ -241,7 +241,8 @@ pub mod internal_format {
     }
 }
 pub use internal_format::*;
-
+use crate::display::symbol::material::VarDecl;
+use crate::system::gpu::types::glsl::PrimType;
 
 
 // ======================
@@ -449,7 +450,7 @@ pub struct GpuOnlyData {
 }
 
 impl GpuOnlyData {
-    fn new(width:i32, height:i32) -> Self {
+    pub fn new(width:i32, height:i32) -> Self {
         Self {width,height}
     }
 }
@@ -461,6 +462,18 @@ impl<I,T> StorageRelation<I,T> for GpuOnly {
 impl From<(i32,i32)> for GpuOnlyData {
     fn from(t:(i32,i32)) -> Self {
         Self::new(t.0,t.1)
+    }
+}
+
+impl GpuDefault for GpuOnlyData {
+    fn gpu_default() -> Self {
+        GpuOnlyData{width:0, height:0}
+    }
+}
+
+impl From<GpuOnlyData> for VarDecl {
+    fn from(_: GpuOnlyData) -> Self {
+        VarDecl::new(PrimType::Sampler2d,None)
     }
 }
 
@@ -495,7 +508,16 @@ impl<I,T:Debug> StorageRelation<I,T> for Owned {
 }
 
 
+// ==================
+// === MemoryView ===
+// ==================
 
+#[derive(Debug)]
+pub struct MemoryView;
+
+impl<I,T:Debug> StorageRelation<I,T> for MemoryView {
+    type Storage = GpuOnlyData; // TODO[AO]; technically GPU-only data, but docs are misleading
+}
 
 
 
@@ -504,6 +526,7 @@ pub trait StorageRelation<InternalFormat,ElemType> {
 }
 
 pub type Storage<S,I,T> = <S as StorageRelation<I,T>>::Storage;
+
 
 
 // ===============
@@ -668,8 +691,35 @@ impl<I:InternalFormat,T:TextureItemType + JsBufferViewArr + Debug> Texture<Owned
 
     /// Loads or re-loads the texture data from provided source.
     pub fn reload(&self) {
-        let width           = self.storage.width;
-        let height          = self.storage.height;
+        self.reload_from_memory(&self.storage.data,self.storage.width,self.storage.height)
+    }
+}
+
+impl<I:InternalFormat,T:TextureItemType + JsBufferViewArr + Debug> Texture<MemoryView,I,T> {
+    /// Constructor.
+    pub fn new(context:&Context, data:&[T], width:i32, height:i32) -> Self {
+        let storage = GpuOnlyData {width,height};
+        let mut out = Self::new_unitialized(context,storage);
+        out.reload(data,width,height);
+        out
+    }
+
+    /// Loads or re-loads the texture data from provided source.
+    pub fn reload(&mut self, data:&[T], width:i32, height:i32) {
+        self.storage.width = width;
+        self.storage.height = height;
+        self.reload_from_memory(data,width,height)
+    }
+
+    pub fn width (&self) -> i32 { self.storage.width  }
+    pub fn height(&self) -> i32 { self.storage.height }
+}
+
+impl<S,I,T> Texture<S,I,T>
+where S : StorageRelation<I,T>,
+      I : InternalFormat,
+      T : TextureItemType + JsBufferViewArr + Debug {
+    fn reload_from_memory(&self, data:&[T], width:i32, height:i32) {
         let target          = Context::TEXTURE_2D;
         let level           = 0;
         let border          = 0;
@@ -681,7 +731,7 @@ impl<I:InternalFormat,T:TextureItemType + JsBufferViewArr + Debug> Texture<Owned
         unsafe {
             // We use unsafe array view which is used immediately, so no allocations should happen
             // until we drop the view.
-            let view = self.storage.data.js_buffer_view();
+            let view = data.js_buffer_view();
             let result = self.context
                 .tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_array_buffer_view
                 (target,level,internal_format,width,height,border,format,elem_type,Some(&view));

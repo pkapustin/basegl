@@ -123,8 +123,6 @@ pub struct WorkspaceData {
     variables     : UniformScope,
     #[derivative(Debug="ignore")]
     on_resize     : Option<Box<dyn Fn(&Shape)>>,
-    // TODO[AO] this is a very temporary solution. Need to develop some general component handling.
-    text_components : Vec<text::TextComponent>,
 }
 
 impl {
@@ -147,7 +145,6 @@ impl {
         let listeners       = Self::init_listeners(&logger,&canvas,&shape,&shape_dirty);
         let symbols_dirty   = dirty_flag;
         let scene           = Scene::new(logger.sub("scene"),&variables);
-        let text_components = default();
         let on_resize       = default();
 
         variables.add("pixel_ratio", shape.pixel_ratio());
@@ -164,7 +161,7 @@ impl {
                                         , Context::ONE , Context::ONE_MINUS_SRC_ALPHA );
 
         let this = Self {canvas,context,symbols,scene,symbols_dirty,shape,shape_dirty,logger
-                        ,listeners,variables,on_resize,text_components};
+                        ,listeners,variables,on_resize};
         this
     }
 
@@ -199,12 +196,6 @@ impl {
     /// Check dirty flags and update the state accordingly.
     pub fn update(&mut self, fonts:&mut Fonts) {
         self.render();
-        if !self.text_components.is_empty() {
-            self.logger.info("Rendering text components");
-            for text_component in &mut self.text_components {
-                text_component.display(fonts);
-            }
-        }
     }
 
     pub fn index(&self, ix:usize) -> Symbol {
@@ -252,12 +243,6 @@ impl Workspace {
 }
 
 impl WorkspaceData {
-
-    pub fn tmp_text_components(&mut self) -> &mut Vec<text::TextComponent> {
-        &mut self.text_components
-    }
-
-
     /// Initialize all listeners and attach them to DOM elements.
     fn init_listeners
     (logger:&Logger, canvas:&web_sys::HtmlCanvasElement, shape:&Shape, dirty:&ShapeDirty)

@@ -228,7 +228,7 @@ impl<'a> GlyphTextureCoordsBuilder<'a> {
     /// in "single" msdf space to actual texture coordinates.
     pub fn glyph_texture_fragment_transform(&mut self, ch:char) -> Translation2<f64> {
         let glyph_info     = self.font.get_glyph_info(ch);
-        let offset_y       = glyph_info.msdf_texture_rows.start as f64;
+        let offset_y       = glyph_info.msdf_texture_glyph_id as f64 * ;
         Translation2::new(0.0, offset_y)
     }
 }

@@ -30,9 +30,9 @@ use std::collections::hash_map::Entry::Vacant;
 /// [freetype documentation](https://www.freetype.org/freetype2/docs/glyphs/glyphs-3.html#section-1)
 #[derive(Debug)]
 pub struct GlyphRenderInfo {
-    pub msdf_texture_rows : std::ops::Range<usize>,
-    pub from_base_layout  : nalgebra::Projective2<f64>,
-    pub advance           : f64
+    pub msdf_texture_glyph_id: usize,
+    pub from_base_layout : nalgebra::Projective2<f64>,
+    pub advance          : f64
 }
 
 /// A single font data used for rendering
@@ -99,16 +99,13 @@ impl FontRenderInfo {
         let unicode             = ch as u32;
         let params              = Self::MSDF_PARAMS;
         let msdf_height         = MsdfTexture::ONE_GLYPH_HEIGHT;
-        let msdf_tex_rows_begin = self.msdf_texture.rows();
-        let msdf_tex_rows_end   = msdf_tex_rows_begin + msdf_height;
 
         let msdf                = MultichannelSignedDistanceField::generate(handle,unicode,&params);
         let msdf_transformation = convert_msdf_transformation(&msdf);
-        let advance             = x_distance_from_msdf_value(msdf.advance);
         let glyph_info = GlyphRenderInfo {
-            msdf_texture_rows     : msdf_tex_rows_begin..msdf_tex_rows_end,
+            msdf_texture_glyph_id : self.glyphs.len(),
             from_base_layout      : msdf_transformation.inverse(),
-            advance
+            advance               : x_distance_from_msdf_value(msdf.advance),
         };
         self.msdf_texture.extend(msdf.data.iter());
         self.glyphs.insert(ch, glyph_info);
@@ -154,7 +151,7 @@ impl FontRenderInfo {
         let msdf_data               = (0..data_size).map(|_| 0.12345);
 
         let char_info = GlyphRenderInfo {
-            msdf_texture_rows     : (msdf_texture_rows_begin..msdf_texture_rows_end),
+            msdf_texture_glyph_id : self.glyphs.len(),
             from_base_layout      : nalgebra::Transform::identity(),
             advance               : 0.0
         };
@@ -275,11 +272,11 @@ mod tests {
             let first_char  = font_render_info.glyphs.get(&'A').unwrap();
             let second_char = font_render_info.glyphs.get(&'B').unwrap();
 
-            let first_range  = 0..MsdfTexture::ONE_GLYPH_HEIGHT;
-            let second_range = MsdfTexture::ONE_GLYPH_HEIGHT..tex_height;
+            let first_index  = 0;
+            let second_index = 1;
 
-            assert_eq!(first_range  , first_char.msdf_texture_rows);
-            assert_eq!(second_range , second_char.msdf_texture_rows);
+            assert_eq!(first_index  , first_char.msdf_texture_glyph_id);
+            assert_eq!(second_index , second_char.msdf_texture_glyph_id);
         })
     }
 
@@ -290,13 +287,13 @@ mod tests {
 
             {
                 let char_info = font_render_info.get_glyph_info('A');
-                assert_eq!(0..MsdfTexture::WIDTH, char_info.msdf_texture_rows);
+                assert_eq!(0, char_info.msdf_texture_glyph_id);
             }
             assert_eq!(1, font_render_info.glyphs.len());
 
             {
                 let char_info = font_render_info.get_glyph_info('A');
-                assert_eq!(0..MsdfTexture::WIDTH, char_info.msdf_texture_rows);
+                assert_eq!(0, char_info.msdf_texture_glyph_id);
             }
             assert_eq!(1, font_render_info.glyphs.len());
         })

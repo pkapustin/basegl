@@ -602,6 +602,8 @@ impl World {
         self.rc.borrow().workspace.new_symbol2()
     }
 
+    pub fn workspace(&self) -> Workspace { self.rc.borrow().workspace.clone() }
+
     /// Run the provided callback on every frame. Returns a `CallbackHandle`,
     /// which when dropped will cancel the callback. If you want the function
     /// to run forever, you can use the `forget` method in the handle.
